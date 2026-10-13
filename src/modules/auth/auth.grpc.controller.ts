@@ -24,7 +24,14 @@ export class AuthGrpcController {
   @GrpcMethod('AuthService', 'Register')
   async register(data: RegisterRequest) {
     try {
-      return await this.authService.register(data);
+      const result = await this.authService.register(data);
+
+      return {
+        accessToken: result.accessToken,
+        tokenType: 'Bearer',
+        expiresIn: 900,
+        userId: result.user.id,
+      };
     } catch (error) {
       if (error instanceof ConflictException) {
         throw new RpcException({
@@ -46,6 +53,7 @@ export class AuthGrpcController {
         accessToken: result.accessToken,
         tokenType: 'Bearer',
         expiresIn: 900,
+        userId: result.user.id,
       };
     } catch (error) {
       if (error instanceof GrpcUnauthenticatedException) {

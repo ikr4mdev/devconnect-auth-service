@@ -21,7 +21,7 @@
     "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@devconnect-microservices/devconnect-contracts": "^1.0.0",
+    "@devconnect-microservices/devconnect-contracts": "^1.1.0",
     "@grpc/grpc-js": "^1.14.6",
     "@grpc/proto-loader": "^0.8.1",
     "@nestjs/common": "^12.1.3",

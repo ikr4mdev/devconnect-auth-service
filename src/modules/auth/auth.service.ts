@@ -48,7 +48,28 @@ export class AuthService {
       },
     });
 
-    return user;
+    const accessToken = await this.jwtService.signAsync(
+      {
+        sub: user.id,
+        email: user.email,
+      },
+      {
+        algorithm: 'RS256',
+        audience: authConfig.audience,
+        issuer: authConfig.issuer,
+        expiresIn: authConfig.expiresIn as StringValue,
+      },
+    );
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        isEmailVerified: user.isEmailVerified,
+        createdAt: user.createdAt,
+      },
+      accessToken,
+    };
   }
 
   async login(dto: LoginDto) {
