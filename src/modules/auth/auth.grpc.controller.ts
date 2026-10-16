@@ -1,11 +1,6 @@
-import { Controller, ConflictException } from '@nestjs/common';
-import {
-  GrpcMethod,
-  RpcException,
-  GrpcUnauthenticatedException,
-} from '@nestjs/microservices';
+import { Controller } from '@nestjs/common';
+import { GrpcMethod } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import { status } from '@grpc/grpc-js';
 
 interface LoginRequest {
   email: string;
@@ -17,53 +12,42 @@ interface RegisterRequest {
   password: string;
 }
 
+interface ResendVerificationRequest {
+  email: string;
+}
+
+interface VerifyEmailRequest {
+  token: string;
+}
+
 @Controller()
 export class AuthGrpcController {
   constructor(private readonly authService: AuthService) {}
 
   @GrpcMethod('AuthService', 'Register')
   async register(data: RegisterRequest) {
-    try {
-      const result = await this.authService.register(data);
-
-      return {
-        accessToken: result.accessToken,
-        tokenType: 'Bearer',
-        expiresIn: 900,
-        userId: result.user.id,
-      };
-    } catch (error) {
-      if (error instanceof ConflictException) {
-        throw new RpcException({
-          code: status.ALREADY_EXISTS,
-          message: 'Email is already registered.',
-        });
-      }
-
-      throw error;
-    }
+    return this.authService.register(data);
   }
 
   @GrpcMethod('AuthService', 'Login')
   async login(data: LoginRequest) {
-    try {
-      const result = await this.authService.login(data);
+    const result = await this.authService.login(data);
 
-      return {
-        accessToken: result.accessToken,
-        tokenType: 'Bearer',
-        expiresIn: 900,
-        userId: result.user.id,
-      };
-    } catch (error) {
-      if (error instanceof GrpcUnauthenticatedException) {
-        throw new RpcException({
-          code: status.UNAUTHENTICATED,
-          message: 'Invalid email or password.',
-        });
-      }
+    return {
+      accessToken: result.accessToken,
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      userId: result.user.id,
+    };
+  }
 
-      throw error;
-    }
+  @GrpcMethod('AuthService', 'ResendVerification')
+  async resendVerification(data: ResendVerificationRequest) {
+    return await this.authService.resendVerification(data.email);
+  }
+
+  @GrpcMethod('AuthService', 'VerifyEmail')
+  async verifyEmail(data: VerifyEmailRequest) {
+    return this.authService.verifyEmail(data.token);
   }
 }

@@ -10,12 +10,14 @@ import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { authConfig } from '../../core/config/auth.config';
 import { StringValue } from 'ms';
+import { EmailVerificationService } from '../email-verification/email-verification.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -48,18 +50,7 @@ export class AuthService {
       },
     });
 
-    const accessToken = await this.jwtService.signAsync(
-      {
-        sub: user.id,
-        email: user.email,
-      },
-      {
-        algorithm: 'RS256',
-        audience: authConfig.audience,
-        issuer: authConfig.issuer,
-        expiresIn: authConfig.expiresIn as StringValue,
-      },
-    );
+    await this.emailVerification.createVerificationToken(user.id);
 
     return {
       user: {
@@ -68,7 +59,7 @@ export class AuthService {
         isEmailVerified: user.isEmailVerified,
         createdAt: user.createdAt,
       },
-      accessToken,
+      message: 'Registration successful. Email verification is required.',
     };
   }
 
@@ -89,6 +80,12 @@ export class AuthService {
 
     if (!isPasswordMatch)
       throw new UnauthorizedException('Invalid email or password.');
+
+    if (!findUser.isEmailVerified) {
+      throw new UnauthorizedException(
+        'Please verify your email before logging in.',
+      );
+    }
 
     const accessToken = await this.jwtService.signAsync(
       {
@@ -111,6 +108,36 @@ export class AuthService {
         createdAt: findUser.createdAt,
       },
       accessToken,
+    };
+  }
+
+  async resendVerification(email: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        isEmailVerified: true,
+      },
+    });
+
+    const message =
+      'If the account exists and needs verification, an email will be sent.';
+
+    if (!user || user.isEmailVerified) {
+      return { message };
+    }
+
+    await this.emailVerification.createVerificationToken(user.id);
+
+    return { message };
+  }
+
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    await this.emailVerification.verifyEmail(token);
+
+    return {
+      message: 'Email verified successfully. You can now sign in.',
     };
   }
 }
