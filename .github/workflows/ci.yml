@@ -37,8 +37,23 @@ jobs:
       - name: Run Lint
         run: npm run lint
 
+      - name: Generate Temporary JWT Keys
+        run: |
+          mkdir -p .keys
+          openssl genpkey \
+            -algorithm RSA \
+            -pkeyopt rsa_keygen_bits:2048 \
+            -out .keys/jwt-private.pem
+          openssl rsa \
+            -pubout \
+            -in .keys/jwt-private.pem \
+            -out .keys/jwt-public.pem
+
       - name: Run E2E Test
         run: npm run test:e2e -- --runInBand
-
+        env:
+          JWT_AUDIENCE: devconnect-auth-test
+          JWT_ISSUER: devconnect-auth-test
+          
       - name: Build Application
         run: npm run build
