@@ -54,6 +54,7 @@ jobs:
         env:
           JWT_AUDIENCE: devconnect-auth-test
           JWT_ISSUER: devconnect-auth-test
+          FRONTEND_URL: http://localhost:3000
           
       - name: Build Application
         run: npm run build
