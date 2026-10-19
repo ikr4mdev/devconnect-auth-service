@@ -395,7 +395,7 @@ describe('AuthService', () => {
 
     // TODO 6: Verify the returned result contains the expected
     //         user details and accessToken.
-    expect(promise).resolves.toMatchObject({
+    await expect(promise).resolves.toMatchObject({
       user: {
         id: user.id,
         email: user.email,
