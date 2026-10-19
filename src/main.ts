@@ -6,7 +6,6 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { Transport, type MicroserviceOptions } from '@nestjs/microservices';
-import { GrpcExceptionFilter } from './core/filters/grpc-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -40,9 +39,6 @@ async function bootstrap() {
     },
     { inheritAppConfig: true },
   );
-
-  const grpcApp = app.getMicroservices()[0];
-  grpcApp.useGlobalFilters(new GrpcExceptionFilter());
 
   app.enableShutdownHooks();
 

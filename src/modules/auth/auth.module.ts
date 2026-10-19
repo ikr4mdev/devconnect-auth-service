@@ -23,6 +23,5 @@ import { EmailVerificationModule } from '../email-verification/email-verificatio
   ],
   controllers: [AuthController, AuthGrpcController],
   providers: [AuthService],
-  exports: [AuthModule],
 })
 export class AuthModule {}

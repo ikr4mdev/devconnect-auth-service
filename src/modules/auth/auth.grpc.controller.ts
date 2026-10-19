@@ -1,24 +1,12 @@
 import { Controller } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-
-interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-interface RegisterRequest {
-  email: string;
-  password: string;
-}
-
-interface ResendVerificationRequest {
-  email: string;
-}
-
-interface VerifyEmailRequest {
-  token: string;
-}
+import {
+  LoginRequest,
+  RegisterRequest,
+  ResendVerificationRequest,
+  VerifyEmailRequest,
+} from '@devconnect-microservices/devconnect-contracts';
 
 @Controller()
 export class AuthGrpcController {

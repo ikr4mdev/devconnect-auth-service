@@ -47,18 +47,13 @@ export class EmailVerificationService {
     }
 
     const { token, tokenHash } = this.generateVerificationToken();
-    const expireAt = new Date(Date.now() + 15 * 60 * 1000);
+    const expireAt = 15 * 60 * 1000;
 
-    const created = await this.prisma.emailVerificationToken.create({
-      data: {
-        userId: user.id,
-        expireAt,
-        tokenHash,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const created = await this.createEmailVerificationToken(
+      user.id,
+      tokenHash,
+      expireAt,
+    );
 
     const verificationUrl = new URL('/verify-email', this.frontEndUrl);
     verificationUrl.searchParams.set('token', token);
@@ -125,10 +120,24 @@ export class EmailVerificationService {
       });
 
       if (claimed.count === 0) {
-        throw new AppException(
-          AppErrorCode.VERIFICATION_TOKEN_ALREADY_USED,
-          'This verification token is invalid or has already been used.',
-        );
+        const current = await tx.emailVerificationToken.findUnique({
+          where: { id: findMatch.id },
+          select: { usedAt: true, expireAt: true },
+        });
+
+        if (!current) {
+          throw new AppException(
+            AppErrorCode.VERIFICATION_TOKEN_NOT_FOUND,
+            '…',
+          );
+        }
+        if (current.usedAt !== null) {
+          throw new AppException(
+            AppErrorCode.VERIFICATION_TOKEN_ALREADY_USED,
+            '…',
+          );
+        }
+        throw new AppException(AppErrorCode.VERIFICATION_TOKEN_EXPIRED, '…');
       }
 
       const verified = await tx.user.updateMany({
@@ -142,6 +151,39 @@ export class EmailVerificationService {
           'This email address has already been verified.',
         );
       }
+    });
+  }
+
+  private async createEmailVerificationToken(
+    userId: string,
+    tokenHash: string,
+    ttlMs: number,
+  ): Promise<{
+    id: string;
+  }> {
+    const expireAt = new Date(Date.now() + ttlMs);
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.emailVerificationToken.updateMany({
+        where: {
+          userId,
+          usedAt: null,
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      });
+
+      return tx.emailVerificationToken.create({
+        data: {
+          userId,
+          tokenHash,
+          expireAt,
+        },
+        select: {
+          id: true,
+        },
+      });
     });
   }
 

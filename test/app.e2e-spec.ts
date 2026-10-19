@@ -9,7 +9,7 @@ import { EmailService } from '../src/infrastructure/email/email.service';
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
     })

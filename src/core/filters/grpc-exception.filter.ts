@@ -16,6 +16,7 @@ import { Observable, throwError } from 'rxjs';
 @Catch()
 export class GrpcExceptionFilter implements RpcExceptionFilter<unknown> {
   catch(exception: unknown): Observable<never> {
+    console.log('[GrpcExceptionFilter] Caught:', exception);
     if (exception instanceof RpcException) {
       return throwError(() => exception);
     }
@@ -46,6 +47,12 @@ export class GrpcExceptionFilter implements RpcExceptionFilter<unknown> {
       details: message,
       metadata,
     }) as ServiceError;
+
+    console.log('[GrpcExceptionFilter] Sending gRPC error:', {
+      code: grpcError.code,
+      details: grpcError.details,
+      metadata: grpcError.metadata.get('app-error-code'),
+    });
 
     return throwError(() => grpcError);
   }
