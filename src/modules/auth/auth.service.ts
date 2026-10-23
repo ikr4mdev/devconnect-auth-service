@@ -7,17 +7,17 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import * as argon2 from 'argon2';
 import { LoginDto } from './dto/login.dto';
-import { JwtService } from '@nestjs/jwt';
-import { authConfig } from '../../core/config/auth.config';
-import { StringValue } from 'ms';
 import { EmailVerificationService } from '../email-verification/email-verification.service';
+import { AccessTokenService } from '@/core/modules/access-token/access-token.service';
+import { PasswordResetService } from '../password-reset/password-reset.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
     private readonly emailVerification: EmailVerificationService,
+    private readonly accessTokenService: AccessTokenService,
+    private readonly passwordResetService: PasswordResetService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -60,6 +60,7 @@ export class AuthService {
         createdAt: user.createdAt,
       },
       message: 'Registration successful. Email verification is required.',
+      requiresVerification: true,
     };
   }
 
@@ -87,17 +88,9 @@ export class AuthService {
       );
     }
 
-    const accessToken = await this.jwtService.signAsync(
-      {
-        sub: findUser.id,
-        email: findUser.email,
-      },
-      {
-        algorithm: 'RS256',
-        audience: authConfig.audience,
-        issuer: authConfig.issuer,
-        expiresIn: authConfig.expiresIn as StringValue,
-      },
+    const accessToken = await this.accessTokenService.signAccessToken(
+      findUser.id,
+      findUser.email,
     );
 
     return {
@@ -108,6 +101,26 @@ export class AuthService {
         createdAt: findUser.createdAt,
       },
       accessToken,
+    };
+  }
+
+  async forgotPassword(email: string) {
+    await this.passwordResetService.createPasswordResetToken(email);
+
+    return {
+      message:
+        'If the account exists, instructions to reset the password will be sent.',
+    };
+  }
+
+  async resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    await this.passwordResetService.resetPassword(token, newPassword);
+
+    return {
+      message: 'Password reset successfully. You can now sign in.',
     };
   }
 

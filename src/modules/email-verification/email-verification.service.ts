@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { EmailService } from '../../infrastructure/email/email.service';
 import { ConfigService } from '@nestjs/config';
 import { AppException } from '../../core';
 import { AppErrorCode } from '@devconnect-microservices/devconnect-contracts';
+import { generateToken } from '@/core/utils';
 
 @Injectable()
 export class EmailVerificationService {
@@ -46,7 +47,7 @@ export class EmailVerificationService {
       );
     }
 
-    const { token, tokenHash } = this.generateVerificationToken();
+    const { token, tokenHash } = generateToken();
     const expireAt = 15 * 60 * 1000;
 
     const created = await this.createEmailVerificationToken(
@@ -185,18 +186,5 @@ export class EmailVerificationService {
         },
       });
     });
-  }
-
-  private generateVerificationToken(): {
-    token: string;
-    tokenHash: string;
-  } {
-    const token = randomBytes(32).toString('hex');
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-
-    return {
-      token,
-      tokenHash,
-    };
   }
 }

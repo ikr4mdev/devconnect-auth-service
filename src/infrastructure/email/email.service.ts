@@ -56,4 +56,37 @@ export class EmailService {
       );
     }
   }
+
+  async sendPasswordResetEmail(email: string, resetUrl: string): Promise<void> {
+    const { error } = await this.resend.emails.send({
+      from: this.emailFrom,
+      to: email,
+      subject: 'Reset your DevConnect password',
+      html: `
+       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+            <h2>Reset your DevConnect password</h2>
+            <p>We received a request to reset the password for your DevConnect account. Click the button below to choose a new password.</p>
+            <a
+            href="${resetUrl}"
+            style="
+                display: inline-block;
+                padding: 12px 20px;
+                background-color: #2563eb;
+                color: #ffffff;
+                text-decoration: none;
+                border-radius: 6px;
+            "
+            >
+            Reset password
+            </a>
+            <p>This link expires in 15 minutes.</p>
+            <p>If you didn't request a password reset, you can safely ignore this email — your password will not change.</p>
+        </div>
+        `,
+    });
+
+    if (error) {
+      throw new InternalServerErrorException('Failed to send reset email.');
+    }
+  }
 }
