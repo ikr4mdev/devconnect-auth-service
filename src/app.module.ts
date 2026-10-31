@@ -3,6 +3,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
 import { GrpcExceptionFilter } from './core/filters/grpc-exception.filter';
+import { OutboxModule } from './infrastructure/outbox/outbox.module';
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { GrpcExceptionFilter } from './core/filters/grpc-exception.filter';
       isGlobal: true,
     }),
     AuthModule,
+    OutboxModule,
   ],
   providers: [
     {

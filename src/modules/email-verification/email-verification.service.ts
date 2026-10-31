@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { AppException } from '../../core';
 import { AppErrorCode } from '@devconnect-microservices/devconnect-contracts';
 import { generateToken } from '@/core/utils';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class EmailVerificationService {
@@ -48,13 +49,10 @@ export class EmailVerificationService {
     }
 
     const { token, tokenHash } = generateToken();
-    const expireAt = 15 * 60 * 1000;
 
-    const created = await this.createEmailVerificationToken(
-      user.id,
-      tokenHash,
-      expireAt,
-    );
+    const { id } = await this.prisma.$transaction(async (tx) => {
+      return this.createEmailVerificationToken(user.id, tokenHash, tx);
+    });
 
     const verificationUrl = new URL('/verify-email', this.frontEndUrl);
     verificationUrl.searchParams.set('token', token);
@@ -67,7 +65,7 @@ export class EmailVerificationService {
     } catch {
       await this.prisma.emailVerificationToken
         .delete({
-          where: { id: created.id },
+          where: { id },
         })
         .catch(() => {});
 
@@ -155,36 +153,55 @@ export class EmailVerificationService {
     });
   }
 
+  async sendVerificationEmail(email: string, rawToken: string): Promise<void> {
+    const verificationUrl = new URL('/verify-email', this.frontEndUrl);
+    verificationUrl.searchParams.set('token', rawToken);
+
+    await this.emailService.sendVerificationEmail(
+      email,
+      verificationUrl.toString(),
+    );
+  }
+
+  async persistVerificationToken(
+    userId: string,
+    tokenHash: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<{ id: string }> {
+    return this.createEmailVerificationToken(userId, tokenHash, tx);
+  }
+
   private async createEmailVerificationToken(
     userId: string,
     tokenHash: string,
-    ttlMs: number,
+    tx: Prisma.TransactionClient,
   ): Promise<{
     id: string;
   }> {
+    const ttlMs = 15 * 60 * 1000;
     const expireAt = new Date(Date.now() + ttlMs);
 
-    return this.prisma.$transaction(async (tx) => {
-      await tx.emailVerificationToken.updateMany({
-        where: {
-          userId,
-          usedAt: null,
-        },
-        data: {
-          usedAt: new Date(),
-        },
-      });
-
-      return tx.emailVerificationToken.create({
-        data: {
-          userId,
-          tokenHash,
-          expireAt,
-        },
-        select: {
-          id: true,
-        },
-      });
+    await tx.emailVerificationToken.updateMany({
+      where: {
+        userId,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
     });
+
+    const newToken = await tx.emailVerificationToken.create({
+      data: {
+        userId,
+        tokenHash,
+        expireAt,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return newToken;
   }
 }

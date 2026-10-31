@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
@@ -10,6 +11,10 @@ import { LoginDto } from './dto/login.dto';
 import { EmailVerificationService } from '../email-verification/email-verification.service';
 import { AccessTokenService } from '@/core/modules/access-token/access-token.service';
 import { PasswordResetService } from '../password-reset/password-reset.service';
+import { EventType, Prisma, User } from '@prisma/client';
+import { generateToken } from '@/core/utils';
+import { AppException } from '@/core';
+import { AppErrorCode } from '@devconnect-microservices/devconnect-contracts';
 
 @Injectable()
 export class AuthService {
@@ -21,14 +26,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const { email, password } = dto;
-
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (existingUser)
-      throw new ConflictException('Email is already registered.');
+    const { displayName, email, password } = dto;
 
     const passwordHash = await argon2.hash(password, {
       type: argon2.argon2id,
@@ -37,20 +35,68 @@ export class AuthService {
       parallelism: 1,
     });
 
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-      },
-      select: {
-        id: true,
-        email: true,
-        isEmailVerified: true,
-        createdAt: true,
-      },
-    });
+    const { token, tokenHash } = generateToken();
 
-    await this.emailVerification.createVerificationToken(user.id);
+    let user: {
+      id: string;
+      email: string;
+      isEmailVerified: boolean;
+      createdAt: Date;
+    };
+
+    try {
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            email,
+            passwordHash,
+          },
+          select: {
+            id: true,
+            email: true,
+            isEmailVerified: true,
+            createdAt: true,
+          },
+        });
+
+        await this.emailVerification.persistVerificationToken(
+          created.id,
+          tokenHash,
+          tx,
+        );
+
+        await tx.outboxEvent.create({
+          data: {
+            eventType: EventType.USER_REGISTERED,
+            payload: {
+              userId: created.id,
+              email: created.email,
+              displayName,
+            },
+          },
+        });
+
+        return created;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Email is already registered.');
+      }
+
+      throw error;
+    }
+
+    try {
+      await this.emailVerification.sendVerificationEmail(user.email, token);
+    } catch {
+      throw new AppException(
+        AppErrorCode.EMAIL_SEND_FAILED,
+        'Your account was created, but we couldn’t send the verification email. Please request a new one from the sign-in screen.',
+      );
+    }
 
     return {
       user: {

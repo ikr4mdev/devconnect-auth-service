@@ -69,3 +69,22 @@ model PasswordResetToken {
   @@index([userId])
   @@map("password_reset_token")
 }
+
+enum EventType {
+  USER_REGISTERED @map("user.registered")
+
+  @@map("user_event_type")
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid())
+  eventType   EventType @map("event_type")
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error")
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox_event")
+}
