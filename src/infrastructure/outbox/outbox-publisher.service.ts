@@ -52,6 +52,10 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    if (!this.rabbitMqService.isReady) {
+      return;
+    }
+
     this.isProcessing = true;
     try {
       const events = await this.prismaService.outboxEvent.findMany({
