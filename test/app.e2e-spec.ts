@@ -84,7 +84,7 @@ describe('AuthGrpcController (e2e)', () => {
 
   const protoPath = join(
     process.cwd(),
-    'node_modules/@devconnect-microservices/devconnect-contracts/proto/auth.proto',
+    'node_modules/@ikr4mdev/devconnect-contracts/proto/auth.proto',
   );
 
   const loaderOptions = {

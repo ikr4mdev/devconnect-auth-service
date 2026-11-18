@@ -9,7 +9,7 @@ import { RpcException } from '@nestjs/microservices';
 import {
   AppErrorCode,
   GrpcStatusMap,
-} from '@devconnect-microservices/devconnect-contracts';
+} from '@ikr4mdev/devconnect-contracts';
 import { AppException } from '../../core';
 import { Observable, throwError } from 'rxjs';
 

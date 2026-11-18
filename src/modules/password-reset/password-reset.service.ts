@@ -1,7 +1,7 @@
 import { AppException } from '@/core';
 import { PrismaService } from '@/infrastructure/database/prisma.service';
 import { EmailService } from '@/infrastructure/email/email.service';
-import { AppErrorCode } from '@devconnect-microservices/devconnect-contracts';
+import { AppErrorCode } from '@ikr4mdev/devconnect-contracts';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';

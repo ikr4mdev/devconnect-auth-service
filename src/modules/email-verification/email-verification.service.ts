@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { EmailService } from '../../infrastructure/email/email.service';
 import { ConfigService } from '@nestjs/config';
 import { AppException } from '../../core';
-import { AppErrorCode } from '@devconnect-microservices/devconnect-contracts';
+import { AppErrorCode } from '@ikr4mdev/devconnect-contracts';
 import { generateToken } from '@/core/utils';
 import { Prisma } from '@prisma/client';
 

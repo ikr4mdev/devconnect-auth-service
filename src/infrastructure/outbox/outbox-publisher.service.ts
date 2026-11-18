@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq-connection.service';
+import * as amqp from 'amqplib';
 
 @Injectable()
 export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
@@ -22,6 +23,12 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
 
   // prevents a new polling run from starting while the previous one is still running.
   private isProcessing = false;
+
+  private readonly returnedMessages = new Map<string, string>();
+
+  private returnChannel: amqp.ConfirmChannel | null = null;
+
+  private returnListener: ((message: amqp.Message) => void) | null = null;
 
   constructor(
     private readonly prismaService: PrismaService,
@@ -45,6 +52,44 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.interval = null;
+
+    if (this.returnChannel && this.returnListener) {
+      this.returnChannel.removeListener('return', this.returnListener);
+    }
+
+    this.returnChannel = null;
+    this.returnListener = null;
+    this.returnedMessages.clear();
+  }
+
+  private attachReturnListener(channel: amqp.ConfirmChannel): void {
+    if (this.returnChannel === channel) {
+      return;
+    }
+
+    if (this.returnChannel && this.returnListener) {
+      this.returnChannel.removeListener('return', this.returnListener);
+    }
+
+    this.returnedMessages.clear();
+
+    this.returnChannel = channel;
+
+    this.returnListener = (message: amqp.Message) => {
+      const messageId = message.properties.messageId;
+
+      if (typeof messageId !== 'string') {
+        this.logger.error('RabbitMQ returned a message without a messageId.');
+        return;
+      }
+
+      this.returnedMessages.set(
+        messageId,
+        `RabbitMQ returned an unroutable message (exchange=${message.fields.exchange}, routingKey=${message.fields.routingKey})`,
+      );
+    };
+
+    channel.on('return', this.returnListener);
   }
 
   private async processPendingEvents(): Promise<void> {
@@ -79,6 +124,8 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
           const channel = this.rabbitMqService.getChannel();
           const exchange = this.rabbitMqService.getExchange();
 
+          this.attachReturnListener(channel);
+
           const routingKey =
             event.eventType === 'USER_REGISTERED' ? 'user.registered' : null;
 
@@ -95,6 +142,7 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
               message,
               {
                 persistent: true,
+                mandatory: true,
                 messageId: event.id,
                 contentType: 'application/json',
               },
@@ -109,11 +157,21 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
             );
           });
 
+          const returnError = this.returnedMessages.get(event.id);
+
+          this.returnedMessages.delete(event.id);
+
+          if (returnError) {
+            throw new Error(returnError);
+          }
+
           await this.prismaService.outboxEvent.update({
             where: { id: event.id },
             data: { publishedAt: new Date() },
           });
         } catch (error) {
+          this.returnedMessages.delete(event.id);
+
           const errorMessage =
             error instanceof Error ? error.message : String(error);
 

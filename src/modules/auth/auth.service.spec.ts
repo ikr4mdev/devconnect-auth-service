@@ -9,6 +9,8 @@ import { AuthService } from './auth.service';
 import { AccessTokenService } from '@/core/modules/access-token/access-token.service';
 import { PasswordResetService } from '../password-reset/password-reset.service';
 
+import { EventType, Prisma } from '@prisma/client';
+
 jest.mock('argon2', () => ({
   hash: jest.fn(),
   verify: jest.fn(),
@@ -19,8 +21,12 @@ describe('AuthService', () => {
   let module: TestingModule;
 
   let prismaMock: {
+    $transaction: jest.Mock;
     user: {
       findUnique: jest.Mock;
+      create: jest.Mock;
+    };
+    outboxEvent: {
       create: jest.Mock;
     };
     emailVerificationToken: {
@@ -40,6 +46,8 @@ describe('AuthService', () => {
   let emailVerificationServiceMock: {
     createVerificationToken: jest.Mock;
     verifyEmail: jest.Mock;
+    persistVerificationToken: jest.Mock;
+    sendVerificationEmail: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -51,13 +59,20 @@ describe('AuthService', () => {
       emailVerificationToken: {
         findUnique: jest.fn(),
       },
+      outboxEvent: {
+        create: jest.fn(),
+      },
+      $transaction: jest.fn((callback) => callback(prismaMock)),
     };
 
     emailVerificationServiceMock = {
       createVerificationToken: jest.fn(),
       verifyEmail: jest.fn(),
+      persistVerificationToken: jest
+        .fn()
+        .mockResolvedValue({ id: 'token-123' }),
+      sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
     };
-
     accessTokenServiceMock = {
       signAccessToken: jest.fn(),
     };
@@ -98,36 +113,43 @@ describe('AuthService', () => {
 
   it('should register a new user successfully', async () => {
     const dto = {
+      displayName: 'Master User',
       email: 'master@example.com',
       password: 'StrongPassword123!',
     };
 
     const userId = 'user-123';
-
     const createdAt = new Date('2026-01-01T00:00:00.000Z');
-
     const hashPassword = 'hashed-password';
 
-    (argon2.hash as jest.Mock).mockResolvedValueOnce('hashed-password');
+    (argon2.hash as jest.Mock).mockResolvedValueOnce(hashPassword);
 
-    prismaMock.user.findUnique.mockResolvedValueOnce(null);
+    const txMock = {
+      user: {
+        create: jest.fn().mockResolvedValueOnce({
+          id: userId,
+          email: dto.email,
+          isEmailVerified: false,
+          createdAt,
+        }),
+      },
+      outboxEvent: {
+        create: jest.fn().mockResolvedValueOnce({
+          id: 'event-123',
+        }),
+      },
+    };
 
-    prismaMock.user.create.mockResolvedValueOnce({
-      id: userId,
-      email: dto.email,
-      isEmailVerified: false,
-      createdAt,
-    });
+    prismaMock.$transaction.mockImplementationOnce(async (cb) => cb(txMock));
 
-    emailVerificationServiceMock.createVerificationToken.mockResolvedValueOnce(
+    emailVerificationServiceMock.persistVerificationToken.mockResolvedValueOnce(
+      undefined,
+    );
+    emailVerificationServiceMock.sendVerificationEmail.mockResolvedValueOnce(
       undefined,
     );
 
     const result = await authService.register(dto);
-
-    expect(prismaMock.user.findUnique).toHaveBeenCalledWith({
-      where: { email: dto.email },
-    });
 
     expect(argon2.hash).toHaveBeenCalledWith(dto.password, {
       type: argon2.argon2id,
@@ -136,7 +158,8 @@ describe('AuthService', () => {
       parallelism: 1,
     });
 
-    expect(prismaMock.user.create).toHaveBeenCalledWith({
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(txMock.user.create).toHaveBeenCalledWith({
       data: {
         email: dto.email,
         passwordHash: hashPassword,
@@ -150,15 +173,30 @@ describe('AuthService', () => {
     });
 
     expect(
-      emailVerificationServiceMock.createVerificationToken,
-    ).toHaveBeenCalledWith(userId);
+      emailVerificationServiceMock.persistVerificationToken,
+    ).toHaveBeenCalledWith(userId, expect.any(String), txMock);
+
+    expect(txMock.outboxEvent.create).toHaveBeenCalledWith({
+      data: {
+        eventType: EventType.USER_REGISTERED,
+        payload: {
+          userId,
+          email: dto.email,
+          displayName: dto.displayName,
+        },
+      },
+    });
+
+    expect(
+      emailVerificationServiceMock.sendVerificationEmail,
+    ).toHaveBeenCalledWith(dto.email, expect.any(String));
 
     expect(result).toEqual({
       user: {
         id: userId,
         email: dto.email,
         isEmailVerified: false,
-        createdAt: createdAt,
+        createdAt,
       },
       message: 'Registration successful. Email verification is required.',
       requiresVerification: true,
@@ -167,44 +205,57 @@ describe('AuthService', () => {
 
   it('should throw ConflictException if email already exists', async () => {
     const dto = {
+      displayName: 'Master User',
       email: 'master@example.com',
       password: 'StrongPassword123!',
     };
 
-    prismaMock.user.findUnique.mockResolvedValueOnce({
-      id: 'user-123',
-      email: dto.email,
-    });
+    const databaseError = new Prisma.PrismaClientKnownRequestError(
+      'Unique constraint failed',
+      {
+        code: 'P2002',
+        clientVersion: '6.19.3',
+      },
+    );
+
+    prismaMock.$transaction.mockRejectedValueOnce(databaseError);
+
+    (argon2.hash as jest.Mock).mockResolvedValueOnce('hashed-password');
 
     await expect(authService.register(dto)).rejects.toThrow(
       new ConflictException('Email is already registered.'),
     );
 
-    expect(prismaMock.user.create).not.toHaveBeenCalled();
-
-    expect(argon2.hash).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(
+      emailVerificationServiceMock.sendVerificationEmail,
+    ).not.toHaveBeenCalled();
+    expect(
+      emailVerificationServiceMock.persistVerificationToken,
+    ).not.toHaveBeenCalled();
   });
 
   it('should propagate an error if user creation fails', async () => {
     const dto = {
+      displayName: 'Master User',
       email: 'master@example.com',
       password: 'StrongPassword123!',
     };
 
     const databaseError = new Error('Database unavailable');
 
-    prismaMock.user.findUnique.mockResolvedValueOnce(null);
-
     (argon2.hash as jest.Mock).mockResolvedValueOnce('hashed-password');
-
-    prismaMock.user.create.mockRejectedValueOnce(databaseError);
+    prismaMock.$transaction.mockRejectedValueOnce(databaseError);
 
     await expect(authService.register(dto)).rejects.toThrow(
       'Database unavailable',
     );
 
     expect(
-      emailVerificationServiceMock.createVerificationToken,
+      emailVerificationServiceMock.persistVerificationToken,
+    ).not.toHaveBeenCalled();
+    expect(
+      emailVerificationServiceMock.sendVerificationEmail,
     ).not.toHaveBeenCalled();
   });
 

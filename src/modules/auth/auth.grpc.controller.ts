@@ -11,7 +11,7 @@ import {
   ResendVerificationRequest,
   ResetPasswordRequest,
   VerifyEmailRequest,
-} from '@devconnect-microservices/devconnect-contracts';
+} from '@ikr4mdev/devconnect-contracts';
 
 @Controller()
 export class AuthGrpcController {

@@ -5,7 +5,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { EmailService } from '../../infrastructure/email/email.service';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
-import { AppErrorCode } from '@devconnect-microservices/devconnect-contracts';
+import { AppErrorCode } from '@ikr4mdev/devconnect-contracts';
 
 const hashToken = (token: string) =>
   createHash('sha256').update(token).digest('hex');

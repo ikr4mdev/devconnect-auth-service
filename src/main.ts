@@ -28,7 +28,7 @@ async function bootstrap() {
         package: 'auth',
         protoPath: join(
           process.cwd(),
-          'node_modules/@devconnect-microservices/devconnect-contracts/proto/auth.proto',
+          'node_modules/@ikr4mdev/devconnect-contracts/proto/auth.proto',
         ),
         url: '127.0.0.1:50051',
         credentials: grpcCredentials,

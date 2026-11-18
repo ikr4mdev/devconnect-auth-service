@@ -14,7 +14,7 @@ import { PasswordResetService } from '../password-reset/password-reset.service';
 import { EventType, Prisma, User } from '@prisma/client';
 import { generateToken } from '@/core/utils';
 import { AppException } from '@/core';
-import { AppErrorCode } from '@devconnect-microservices/devconnect-contracts';
+import { AppErrorCode } from '@ikr4mdev/devconnect-contracts';
 
 @Injectable()
 export class AuthService {

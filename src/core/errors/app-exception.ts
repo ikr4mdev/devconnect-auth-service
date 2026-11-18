@@ -1,4 +1,4 @@
-import { AppErrorCode } from '@devconnect-microservices/devconnect-contracts';
+import { AppErrorCode } from '@ikr4mdev/devconnect-contracts';
 
 export class AppException extends Error {
   public readonly code: AppErrorCode;
